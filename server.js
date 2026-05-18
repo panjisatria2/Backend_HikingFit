@@ -20,3 +20,8 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`🚀 Server mantap running di port ${PORT}`);
 });
+
+// ==========================================
+// BARIS WAJIB UNTUK DEPLOY DI VERCEL
+// ==========================================
+export default app;
