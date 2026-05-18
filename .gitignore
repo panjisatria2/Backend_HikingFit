@@ -1,0 +1,30 @@
+# Dependencies (Folder berat, biarkan server yang install sendiri)
+node_modules/
+
+# Environment Variables (SANGAT PENTING: Jangan sampai bocor!)
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Log Files
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor & OS files (Konfigurasi lokal VS Code & OS)
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Coverage directory used by testing tools
+coverage/
+
+# Build build output
+dist/
+build/
