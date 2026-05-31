@@ -4,11 +4,10 @@ import supabase from '../config/supabase.js';
 const router = express.Router();
 
 // =========================================================================
-// INTERNALLY-SCOPED MIDDLEWARE: VERIFIKASI JWT SUPABASE
+// MIDDLEWARE: VERIFIKASI TOKEN JWT SUPABASE
 // =========================================================================
 const verifyJWT = async (req, res, next) => {
   try {
-    // 1. Ambil token dari header 'Authorization: Bearer <TOKEN>'
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ 
@@ -19,7 +18,7 @@ const verifyJWT = async (req, res, next) => {
 
     const token = authHeader.split(' ')[1];
 
-    // 2. Verifikasi token langsung ke Supabase Auth
+    // Ambil data user secara real-time berdasarkan token
     const { data: { user }, error } = await supabase.auth.getUser(token);
 
     if (error || !user) {
@@ -29,10 +28,7 @@ const verifyJWT = async (req, res, next) => {
       });
     }
 
-    // 3. Jika token valid, simpan data user ke dalam objek request 'req.user'
     req.user = user;
-    
-    // Lanjut ke fungsi utama di route
     next();
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -40,14 +36,12 @@ const verifyJWT = async (req, res, next) => {
 };
 
 // =========================================================================
-// 1. POST: REGISTER AKUN BARU DENGAN AUTO-ROLE (REQ-062, REQ-063)
+// 1. POST: REGISTER AKUN BARU + INITIATE EMAIL OTP
 // =========================================================================
 router.post('/register', async (req, res) => {
   try {
-    // Menerima parameter 'device' ('web' atau 'mobile') dari client
     const { fullName, email, password, confirmPassword, device } = req.body;
 
-    // Validasi input di sisi server (REQ-063)
     if (!fullName || !email || !password || !confirmPassword) {
       return res.status(400).json({ success: false, message: 'Semua field wajib diisi!' });
     }
@@ -55,18 +49,16 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Password dan Confirm Password tidak cocok!' });
     }
 
-    // Penentuan ROLE otomatis berdasarkan asal device pendaftaran
-    let userRole = 'user'; // Bawaan untuk aplikasi mobile (pengguna umum)
+    let userRole = 'user'; 
     if (device === 'web') {
-      userRole = 'admin';  // Otomatis dikunci sebagai admin jika daftar via website
+      userRole = 'admin';  
     }
 
-    // Daftarkan akun kredensial ke Supabase Auth
+    // Mendaftarkan user ke Supabase Auth dengan Bcrypt Hashing internal otomatis
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        // Menyimpan Nama Lengkap & Role permanen ke dalam user_metadata Supabase
         data: { 
           full_name: fullName,
           role: userRole 
@@ -76,10 +68,15 @@ router.post('/register', async (req, res) => {
 
     if (error) throw error;
 
+    // Jika daftar dari mobile, paksa verifikasi OTP email sebelum bisa dipakai login
     res.status(201).json({
       success: true,
-      message: `Registrasi berhasil sebagai ${userRole}! Silakan lanjut ke langkah berikutnya.`,
-      user: data.user
+      message: 'Registrasi berhasil! Kode verifikasi OTP telah dikirimkan ke email Anda.',
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+        confirmed: data.user.email_confirmed_at != null
+      }
     });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
@@ -87,7 +84,38 @@ router.post('/register', async (req, res) => {
 });
 
 // =========================================================================
-// 2. POST: LOGIN MULTI-DEVICE (REQ-060, Custom Expiry & Proteksi Admin)
+// 2. POST: VERIFIKASI KODE OTP EMAIL (KEAMANAN TAMBAHAN)
+// =========================================================================
+router.post('/verify-otp', async (req, res) => {
+  try {
+    const { email, tokenOtp } = req.body;
+
+    if (!email || !tokenOtp) {
+      return res.status(400).json({ success: false, message: 'Email dan Token OTP wajib diisi!' });
+    }
+
+    // Melakukan pengecekan token OTP ke server otentikasi Supabase
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token: tokenOtp,
+      type: 'signup' // tipe signup untuk memverifikasi pendaftaran user baru
+    });
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      message: 'Email berhasil diverifikasi secara aman! Silakan lakukan login.',
+      session: data.session,
+      user: data.user
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: `Gagal verifikasi OTP: ${error.message}` });
+  }
+});
+
+// =========================================================================
+// 3. POST: LOGIN DENGAN PROTEKSI MULTI-DEVICE & INTEGRASI STATUS PROFIL
 // =========================================================================
 router.post('/login', async (req, res) => {
   try {
@@ -97,14 +125,19 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email & password wajib diisi!' });
     }
 
-    // Verifikasi akun ke Supabase Auth
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
 
-    // Ambil role yang tersimpan di dalam metadata akun saat register dulu
+    // Proteksi Keamanan: Cek apakah user sudah verifikasi email OTP-nya
+    if (device === 'mobile' && !data.user.email_confirmed_at) {
+      return res.status(403).json({
+        success: false,
+        message: 'Akses ditolak! Silakan verifikasi email Anda menggunakan kode OTP terlebih dahulu.'
+      });
+    }
+
     const userRole = data.user?.user_metadata?.role || 'user';
 
-    // ⚠️ VALIDASI KEAMANAN: Blokir 'user' biasa yang mencoba login ke Web Admin
     if (device === 'web' && userRole !== 'admin') {
       return res.status(403).json({ 
         success: false, 
@@ -112,15 +145,24 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    let sessionData = { ...data.session };
-    const waktuSekarang = Math.floor(Date.now() / 1000); // Unix timestamp (detik)
+    // Ambil data profil fisik untuk mengecek apakah user sudah mengisi kuesioner onboarding
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('height, weight')
+      .eq('id', data.user.id)
+      .single();
 
-    // Logika kustom masa aktif token (Admin 1 hari, Mobile 30 hari)
+    // Tandai true jika data fisik sudah lengkap tersimpan di tabel database
+    const hasCompletedOnboarding = profile && (profile.height > 0 && profile.weight > 0);
+
+    let sessionData = { ...data.session };
+    const waktuSekarang = Math.floor(Date.now() / 1000); 
+
     if (device === 'web') {
-      sessionData.expires_in = 86400; // 1 Hari (detik)
+      sessionData.expires_in = 86400; 
       sessionData.expires_at = waktuSekarang + 86400;
     } else if (device === 'mobile') {
-      sessionData.expires_in = 2592000; // 30 Hari (detik)
+      sessionData.expires_in = 2592000; 
       sessionData.expires_at = waktuSekarang + 2592000;
     }
 
@@ -129,7 +171,12 @@ router.post('/login', async (req, res) => {
       message: `Login berhasil! Anda masuk sebagai ${userRole}.`,
       role: userRole,
       session: sessionData,
-      user: data.user
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+        fullName: data.user.user_metadata?.full_name,
+        hasCompletedOnboarding: !!hasCompletedOnboarding // Konversi ke nilai boolean murni
+      }
     });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
@@ -137,14 +184,15 @@ router.post('/login', async (req, res) => {
 });
 
 // =========================================================================
-// 3. POST: SUBMIT ONBOARDING ASSESSMENT (REQ-066 s/d REQ-076)
+// 4. POST: SUBMIT KUESIONER ONBOARDING (TERPROTEKSI TOKEN JWT)
 // =========================================================================
-router.post('/onboarding', async (req, res) => {
+router.post('/onboarding', verifyJWT, async (req, res) => {
   try {
-    const { userId, height, weight, experienceLevel, fitnessGoals, mountainPreference } = req.body;
+    // KEAMANAN TINGGI: ID user diambil langsung dari Token JWT (req.user.id), tidak bisa dibajak!
+    const userId = req.user.id;
+    const { height, weight, experienceLevel, fitnessGoals, mountainPreference } = req.body;
 
-    // Validasi kecukupan dan batas nilai input (REQ-068, REQ-069, REQ-074)
-    if (!userId || !height || !weight || !experienceLevel || !fitnessGoals || !mountainPreference) {
+    if (!height || !weight || !experienceLevel || !fitnessGoals || !mountainPreference) {
       return res.status(400).json({ success: false, message: 'Data kuesioner tidak boleh ada yang kosong!' });
     }
     if (height < 140 || height > 220) {
@@ -154,17 +202,14 @@ router.post('/onboarding', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Berat badan harus berupa angka positif!' });
     }
 
-    // Kalkulasi otomatis nilai BMI (REQ-076) -> Rumus: BB (kg) / (TB (m))^2
     const heightInMeter = height / 100;
     const bmiValue = (weight / (heightInMeter * heightInMeter)).toFixed(2);
 
-    // Penentuan Kategori Status BMI berdasarkan standar Kemenkes
     let bmiLabel = 'Ideal';
     if (bmiValue < 18.5) bmiLabel = 'Underweight';
     else if (bmiValue >= 23 && bmiValue < 25) bmiLabel = 'Kelebihan Berat Badan';
     else if (bmiValue >= 25) bmiLabel = 'Overweight';
 
-    // Simpan data fisik awal ke tabel 'profiles' di Supabase (REQ-075)
     const { data, error } = await supabase
       .from('profiles')
       .upsert({
@@ -184,7 +229,7 @@ router.post('/onboarding', async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Onboarding Assessment berhasil disimpan! Profil awal terbentuk.',
+      message: 'Onboarding Assessment berhasil disimpan secara aman murni berbasis Token JWT!',
       bmi_score: bmiValue,
       bmi_status: bmiLabel,
       data: data
@@ -193,15 +238,14 @@ router.post('/onboarding', async (req, res) => {
     res.status(400).json({ success: false, message: error.message });
   }
 });
+
 // =========================================================================
-// 4. GET: AMBIL PROFIL LENGKAP USER (CUKUP MASUKKAN TOKEN SAJA!)
+// 5. GET: AMBIL PROFIL LENGKAP USER (TERPROTEKSI TOKEN JWT)
 // =========================================================================
 router.get('/profile', verifyJWT, async (req, res) => {
   try {
-    // ID diambil otomatis dari token yang dibongkar oleh verifyJWT (req.user.id)
     const userId = req.user.id;
 
-    // Tarik data biodata fisik dari tabel 'profiles' Supabase
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .select('*')
@@ -212,7 +256,6 @@ router.get('/profile', verifyJWT, async (req, res) => {
       throw profileError;
     }
 
-    // Satukan kepingan data menggunakan info langsung dari token (req.user)
     const responseData = {
       userId: userId,
       fullName: req.user.user_metadata?.full_name || profileData?.full_name || 'Pendaki Fit',
@@ -238,15 +281,13 @@ router.get('/profile', verifyJWT, async (req, res) => {
 });
 
 // =========================================================================
-// 5. PUT: UPDATE PROFIL LENGKAP (CUKUP MASUKKAN TOKEN SAJA!)
+// 6. PUT: UPDATE PROFIL LENGKAP (TERPROTEKSI TOKEN JWT)
 // =========================================================================
 router.put('/profile/update', verifyJWT, async (req, res) => {
   try {
-    // ID diambil otomatis dari token (req.user.id), frontend tidak perlu kirim userId lagi di body
     const userId = req.user.id;
     const { fullName, height, weight, experienceLevel, fitnessGoals, mountainPreference } = req.body;
 
-    // Hitung ulang BMI otomatis jika parameter tinggi atau berat badan ikut diubah
     let bmiValue = 0;
     let bmiLabel = 'Ideal';
     
@@ -259,7 +300,6 @@ router.put('/profile/update', verifyJWT, async (req, res) => {
       else if (bmiValue >= 25) bmiLabel = 'Overweight';
     }
 
-    // Perbarui data secara real-time di tabel database 'profiles'
     const { data, error } = await supabase
       .from('profiles')
       .upsert({
