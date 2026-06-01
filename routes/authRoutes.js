@@ -163,19 +163,18 @@ router.get('/profile', verifyToken, async (req, res) => {
   }
 });
 
-// =========================================================================
-// 5. PUT: UPDATE PROFIL (DARI HALAMAN EDIT PROFIL)
-// =========================================================================
 router.put('/profile', verifyToken, async (req, res) => {
   try {
     const uid = req.user.uid;
-    const { fullName, height, weight, profileImageUrl } = req.body;
+    const { fullName, height, weight, profileImageUrl, age, gender } = req.body;
 
     const updateData = {};
     if (fullName) updateData.fullName = fullName;
     if (height) updateData.height = parseInt(height);
     if (weight) updateData.weight = parseInt(weight);
-    if (profileImageUrl) updateData.profileImageUrl = profileImageUrl; // Simpan link foto dari Firebase Storage
+    if (profileImageUrl !== undefined) updateData.profileImageUrl = profileImageUrl;
+    if (age) updateData.age = parseInt(age); // <--- SIMPAN AGE
+    if (gender) updateData.gender = gender;   // <--- SIMPAN GENDER
 
     // Kalkulasi ulang BMI jika tinggi dan berat diubah oleh user
     if (height && weight) {
