@@ -192,4 +192,41 @@ router.put('/profile', verifyToken, async (req, res) => {
   }
 });
 
+// =========================================================================
+// 6. POST: GOOGLE SIGN-IN (AUTO-REGISTER JIKA BARU)
+// =========================================================================
+router.post('/google-login', verifyToken, async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const email = req.user.email;
+    const fullName = req.user.name || 'Pendaki';
+    const profileImageUrl = req.user.picture || '';
+
+    // Cek apakah user ini sudah ada di database kita
+    const docRef = db.collection('profiles').doc(uid);
+    const doc = await docRef.get();
+
+    let isNewUser = false;
+
+    // Jika belum ada (berarti baru daftar via Google), kita otomatiskan buat profilnya
+    if (!doc.exists) {
+      isNewUser = true;
+      await docRef.set({
+        fullName: fullName,
+        email: email,
+        profileImageUrl: profileImageUrl,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    res.status(200).json({ 
+      success: true, 
+      isNewUser: isNewUser, 
+      message: 'Login Google berhasil.' 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 export default router;
