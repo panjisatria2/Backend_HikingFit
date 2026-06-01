@@ -37,14 +37,14 @@ router.post('/send-otp', async (req, res) => {
       createdAt: new Date().toISOString()
     });
 
-    // 2. Simpan Nama & Email ke Database Profil (PENTING!)
+    // 2. Simpan Nama & Email ke Database Profil
     await db.collection('profiles').doc(uid).set({
       fullName: fullName || 'Pendaki',
       email: email,
       createdAt: new Date().toISOString()
     }, { merge: true }); 
 
-    // 3. Kirim Email (Desain Custom)
+    // 3. Kirim Email 
     const mailOptions = {
       from: '"HikingFit Support" <no-reply@hikingfit.com>',
       to: email,
@@ -119,7 +119,7 @@ const verifyToken = async (req, res, next) => {
 };
 
 // =========================================================================
-// 3. POST: SIMPAN DATA FISIK / QUESIONER
+// 3. POST: SIMPAN DATA FISIK / QUESIONER (ONBOARDING)
 // =========================================================================
 router.post('/onboarding', verifyToken, async (req, res) => {
   try {
@@ -158,6 +158,36 @@ router.get('/profile', verifyToken, async (req, res) => {
     } else {
       res.status(200).json({ success: true, data: null }); 
     }
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// =========================================================================
+// 5. PUT: UPDATE PROFIL (DARI HALAMAN EDIT PROFIL)
+// =========================================================================
+router.put('/profile', verifyToken, async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const { fullName, height, weight, profileImageUrl } = req.body;
+
+    const updateData = {};
+    if (fullName) updateData.fullName = fullName;
+    if (height) updateData.height = parseInt(height);
+    if (weight) updateData.weight = parseInt(weight);
+    if (profileImageUrl) updateData.profileImageUrl = profileImageUrl; // Simpan link foto dari Firebase Storage
+
+    // Kalkulasi ulang BMI jika tinggi dan berat diubah oleh user
+    if (height && weight) {
+      const heightInMeters = height / 100;
+      updateData.bmi = parseFloat((weight / (heightInMeters * heightInMeters)).toFixed(1));
+    }
+    updateData.updatedAt = new Date().toISOString();
+
+    // Simpan semua perubahan ke Firestore
+    await db.collection('profiles').doc(uid).set(updateData, { merge: true });
+
+    res.status(200).json({ success: true, message: 'Profil berhasil diperbarui!' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
