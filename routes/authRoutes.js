@@ -1,132 +1,90 @@
 import express from 'express';
-import { db } from '../config/firebase.js';
-import verifyJWT from '../middleware/authMiddleware.js';
+import { db, auth } from '../config/firebase.js';
+import nodemailer from 'nodemailer';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const router = express.Router();
 
-// =========================================================================
-// 1. POST: SUBMIT KUESIONER ONBOARDING (FIRESTORE)
-// =========================================================================
-router.post('/onboarding', verifyJWT, async (req, res) => {
-  try {
-    const userId = req.user.uid; // uid dari Firebase Auth
-    const { height, weight, experienceLevel, fitnessGoals, mountainPreference } = req.body;
-
-    if (!height || !weight || !experienceLevel || !fitnessGoals || !mountainPreference) {
-      return res.status(400).json({ success: false, message: 'Data kuesioner tidak boleh kosong!' });
-    }
-
-    const heightInMeter = height / 100;
-    const bmiValue = (weight / (heightInMeter * heightInMeter)).toFixed(2);
-
-    let bmiLabel = 'Ideal';
-    if (bmiValue < 18.5) bmiLabel = 'Underweight';
-    else if (bmiValue >= 23 && bmiValue < 25) bmiLabel = 'Kelebihan Berat Badan';
-    else if (bmiValue >= 25) bmiLabel = 'Overweight';
-
-    // Simpan ke Firestore Document NoSQL
-    const profileRef = db.collection('profiles').doc(userId);
-    await profileRef.set({
-      height: height,
-      weight: weight,
-      experienceLevel: experienceLevel,
-      fitnessGoals: fitnessGoals,
-      mountainPreference: mountainPreference,
-      bmiScore: parseFloat(bmiValue),
-      bmiStatus: bmiLabel,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
-
-    res.status(200).json({
-      success: true,
-      message: 'Onboarding Assessment berhasil disimpan ke Firestore!',
-      bmiScore: bmiValue,
-      bmiStatus: bmiLabel
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+// Konfigurasi Nodemailer menggunakan Gmail
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
   }
 });
 
 // =========================================================================
-// 2. GET: AMBIL PROFIL LENGKAP USER (FIRESTORE)
+// 1. POST: KIRIM OTP KE EMAIL (Dipanggil saat Register)
 // =========================================================================
-router.get('/profile', verifyJWT, async (req, res) => {
+router.post('/send-otp', async (req, res) => {
   try {
-    const userId = req.user.uid;
+    const { uid, email } = req.body;
 
-    const profileRef = db.collection('profiles').doc(userId);
-    const doc = await profileRef.get();
-
-    let profileData = {};
-    if (doc.exists) {
-      profileData = doc.data();
+    if (!uid || !email) {
+      return res.status(400).json({ success: false, message: 'UID dan Email wajib dikirim!' });
     }
 
-    const responseData = {
-      userId: userId,
-      fullName: req.user.name || profileData.fullName || 'Pendaki Fit',
-      email: req.user.email || '',
-      height: profileData.height || 0,
-      weight: profileData.weight || 0,
-      bmiScore: profileData.bmiScore || 0,
-      bmiStatus: profileData.bmiStatus || 'Belum dihitung',
-      experienceLevel: profileData.experienceLevel || 'Beginner',
-      fitnessGoals: profileData.fitnessGoals || '',
-      mountainPreference: profileData.mountainPreference || ''
+    // Generate 6 digit angka OTP acak
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Simpan OTP ke database Firestore (koleksi 'otps')
+    await db.collection('otps').doc(uid).set({
+      otp: otpCode,
+      createdAt: new Date().toISOString()
+    });
+
+    // Kirim OTP via Email
+    const mailOptions = {
+      from: '"HikingFit App" <no-reply@hikingfit.com>',
+      to: email,
+      subject: 'Kode Verifikasi OTP HikingFit',
+      text: `Halo, kode verifikasi OTP Anda adalah: ${otpCode}\n\nMasukkan kode ini di aplikasi untuk mengaktifkan akun Anda.`,
+      html: `<h3>Halo Pendaki!</h3><p>Kode verifikasi OTP Anda adalah: <b>${otpCode}</b></p><p>Masukkan kode ini di aplikasi untuk mengaktifkan akun Anda.</p>`
     };
 
-    res.status(200).json({
-      success: true,
-      message: 'Data profil Firestore berhasil diambil!',
-      data: responseData
-    });
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).json({ success: true, message: 'Kode OTP berhasil dikirim ke email.' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
 // =========================================================================
-// 3. PUT: UPDATE PROFIL LENGKAP (FIRESTORE)
+// 2. POST: VERIFIKASI OTP
 // =========================================================================
-router.put('/profile/update', verifyJWT, async (req, res) => {
+router.post('/verify-otp', async (req, res) => {
   try {
-    const userId = req.user.uid;
-    const { fullName, height, weight, experienceLevel, fitnessGoals, mountainPreference } = req.body;
+    const { uid, otp } = req.body;
 
-    let bmiValue = 0;
-    let bmiLabel = 'Ideal';
-    
-    if (height && weight) {
-      const heightInMeter = height / 100;
-      bmiValue = parseFloat((weight / (heightInMeter * heightInMeter)).toFixed(2));
-
-      if (bmiValue < 18.5) bmiLabel = 'Underweight';
-      else if (bmiValue >= 23 && bmiValue < 25) bmiLabel = 'Kelebihan Berat Badan';
-      else if (bmiValue >= 25) bmiLabel = 'Overweight';
+    if (!uid || !otp) {
+      return res.status(400).json({ success: false, message: 'UID dan OTP wajib diisi!' });
     }
 
-    const profileRef = db.collection('profiles').doc(userId);
-    await profileRef.set({
-      fullName: fullName,
-      height: height,
-      weight: weight,
-      experienceLevel: experienceLevel,
-      fitnessGoals: fitnessGoals,
-      mountainPreference: mountainPreference,
-      bmiScore: bmiValue,
-      bmiStatus: bmiLabel,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
+    // Ambil data OTP dari Firestore
+    const otpDoc = await db.collection('otps').doc(uid).get();
 
-    res.status(200).json({
-      success: true,
-      message: 'Profil Firestore berhasil diperbarui!',
-      data: {
-        bmiScore: bmiValue,
-        bmiStatus: bmiLabel
-      }
-    });
+    if (!otpDoc.exists) {
+      return res.status(400).json({ success: false, message: 'Sesi OTP tidak ditemukan atau sudah kedaluwarsa.' });
+    }
+
+    const data = otpDoc.data();
+
+    // Cek kecocokan OTP
+    if (data.otp !== otp) {
+      return res.status(400).json({ success: false, message: 'Kode OTP salah!' });
+    }
+
+    // JIKA BENAR: Update status emailVerified user di Firebase Auth menjadi TRUE
+    await auth.updateUser(uid, { emailVerified: true });
+
+    // Hapus OTP dari Firestore agar tidak bisa dipakai 2 kali
+    await db.collection('otps').doc(uid).delete();
+
+    res.status(200).json({ success: true, message: 'Email berhasil diverifikasi!' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
