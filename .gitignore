@@ -8,6 +8,10 @@ node_modules/
 .env.test
 .env.production
 
+# KUNCI RAHASIA FIREBASE (JANGAN DI-PUSH!)
+firebase-service-account.json
+config/firebase-service-account.json
+
 # Log Files
 logs
 *.log
