@@ -1,13 +1,20 @@
 import admin from 'firebase-admin';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-try {
-  // Ambil string JSON dari .env dan ubah kembali menjadi objek
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+// Trik khusus untuk membaca path folder di dalam ES Module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-  // Inisialisasi Firebase Admin
+try {
+  // Baca langsung file JSON yang posisinya sejajar di dalam folder config
+  const serviceAccountPath = path.join(__dirname, 'firebase-service-account.json');
+  const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
   });
