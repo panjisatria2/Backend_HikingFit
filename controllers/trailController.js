@@ -58,7 +58,7 @@ export const getTrails = async (req, res) => {
           return {
             ...seg,
             estimatedTime: rawTime, // Angka bersih (Untuk form Edit Web Admin)
-            displayTime: `${rawTime} Menit (Standar Muncak.id)` // Teks panjang (Untuk UI Aplikasi Flutter)
+            displayTime: `${rawTime}` // Teks panjang (Untuk UI Aplikasi Flutter)
           };
         });
         return { ...trail, segments: defaultSegments };
