@@ -2,7 +2,11 @@ import express from 'express';
 import http from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
+
+// Import semua routes
 import authRoutes from './routes/authRoutes.js';
+import mountainRoutes from './routes/mountainRoutes.js'; // <-- TAMBAHAN BARU
+import trailRoutes from './routes/trailRoutes.js';       // <-- TAMBAHAN BARU
 
 dotenv.config();
 
@@ -11,8 +15,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Daftarkan route login/register
+// Daftarkan semua endpoint
 app.use('/api/auth', authRoutes);
+app.use('/api/mountains', mountainRoutes); // <-- TAMBAHAN BARU
+app.use('/api/trails', trailRoutes);       // <-- TAMBAHAN BARU
 
 const server = http.createServer(app);
 
