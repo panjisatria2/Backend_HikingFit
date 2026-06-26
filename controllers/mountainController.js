@@ -3,24 +3,34 @@ import { db } from '../config/firebase.js';
 // CREATE: Tambah Gunung Baru
 export const createMountain = async (req, res) => {
   try {
-    const { name, location, elevation, status, description, imageUrl, latitude, longitude, difficulty } = req.body;
+    // 1. TANGKAP SEMUA DATA DARI REACT (Termasuk Durasi, Jarak, dan Provinsi)
+    const { 
+      name, location, province, elevation, status, description, 
+      imageUrl, latitude, longitude, difficulty,
+      estimatedDuration, distance // <--- INI YANG BIKIN DATANYA MASUK!
+    } = req.body;
     
     // Validasi dasar
     if (!latitude || !longitude) {
       return res.status(400).json({ success: false, message: 'Latitude dan Longitude wajib diisi untuk mendeteksi cuaca!' });
     }
 
+    // 2. MASUKKAN KE FORMAT DATABASE
     const newMountain = { 
-      name, 
-      location, 
-      elevation: Number(elevation), 
+      name: name || '', 
+      location: location || '', 
+      province: province || '',
+      elevation: elevation ? Number(elevation) : 0, 
       difficulty: difficulty || 'Medium',
-      status, 
+      status: status || 'Buka', 
       description: description || '', 
-      imageUrl: imageUrl || '', // <--- Menerima Link Gambar dari Web React
+      imageUrl: imageUrl || '', 
       latitude: Number(latitude),
       longitude: Number(longitude),
-      createdAt: new Date().toISOString() 
+      estimatedDuration: estimatedDuration || '-', // <--- SIMPAN KE FIREBASE
+      distance: distance || '-',                   // <--- SIMPAN KE FIREBASE
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
     
     const docRef = await db.collection('mountains').add(newMountain);
@@ -30,7 +40,7 @@ export const createMountain = async (req, res) => {
   }
 };
 
-// READ: Ambil Semua Data Gunung + Cuaca Real-time (Open-Meteo)
+// READ ALL: Ambil Semua Data Gunung + Cuaca Real-time (Open-Meteo)
 export const getAllMountains = async (req, res) => {
   try {
     const snapshot = await db.collection('mountains').get();
@@ -66,7 +76,7 @@ export const getAllMountains = async (req, res) => {
   }
 };
 
-// READ: Ambil Detail 1 Gunung + Cuaca Real-time
+// READ ONE: Ambil Detail 1 Gunung + Cuaca Real-time
 export const getMountainById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -104,9 +114,26 @@ export const getMountainById = async (req, res) => {
 export const updateMountain = async (req, res) => {
   try {
     const { id } = req.params;
-    // req.body otomatis membawa semua data yang diedit dari React, termasuk imageUrl baru jika ada
-    const updateData = { ...req.body, updatedAt: new Date().toISOString() };
     
+    // Pastikan menangkap variabel baru saat Edit
+    const { 
+      name, location, province, elevation, status, description, 
+      imageUrl, latitude, longitude, difficulty,
+      estimatedDuration, distance 
+    } = req.body;
+
+    const updateData = { 
+      name, location, province, 
+      elevation: Number(elevation), 
+      difficulty, status, description, imageUrl, 
+      latitude: Number(latitude), longitude: Number(longitude),
+      estimatedDuration, distance,
+      updatedAt: new Date().toISOString() 
+    };
+    
+    // Bersihkan data yang tidak terkirim (undefined) agar tidak merusak DB
+    Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
+
     await db.collection('mountains').doc(id).update(updateData);
     res.status(200).json({ success: true, message: 'Data gunung berhasil diupdate' });
   } catch (error) {
