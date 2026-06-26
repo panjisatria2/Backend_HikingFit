@@ -2,18 +2,18 @@ import express from 'express';
 import { 
   createMountain, 
   getAllMountains, 
-  getMountainById, // <-- Tambahan baru
+  getMountainById, 
   updateMountain, 
   deleteMountain 
 } from '../controllers/mountainController.js';
-import verifyJWT from '../middleware/authMiddleware.js'; 
 
 const router = express.Router();
 
-router.post('/', verifyJWT, createMountain); // Buat gunung (Admin)
-router.get('/', getAllMountains); // List semua gunung + cuaca (Publik/Flutter)
-router.get('/:id', getMountainById); // Detail 1 gunung + cuaca (Publik/Flutter)
-router.put('/:id', verifyJWT, updateMountain); // Edit (Admin)
-router.delete('/:id', verifyJWT, deleteMountain); // Hapus (Admin)
+// HAPUS SEMUA verifyJWT DARI SINI:
+router.post('/', createMountain); 
+router.get('/', getAllMountains); 
+router.get('/:id', getMountainById); 
+router.put('/:id', updateMountain); 
+router.delete('/:id', deleteMountain); 
 
 export default router;
