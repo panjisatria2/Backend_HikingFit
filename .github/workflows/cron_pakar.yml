@@ -1,0 +1,9 @@
+# Di bagian bawah file cron_pakar.yml
+      - name: Install Library
+        run: pip install -r scripts/requirements.txt  # <-- Membaca dari folder scripts
+
+      - name: Setup Firebase Secret
+        run: echo "${{ secrets.FIREBASE_JSON }}" > firebase-service-account.json
+
+      - name: Jalankan Script Big Data
+        run: python scripts/update_cuaca_pakar.py     # <-- Mengarahkan ke folder scripts
