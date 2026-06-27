@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes.js';
 import mountainRoutes from './routes/mountainRoutes.js'; // <-- TAMBAHAN BARU
 import trailRoutes from './routes/trailRoutes.js';       // <-- TAMBAHAN BARU
+import weatherRoutes from './routes/weatherRoutes.js';
 
 dotenv.config();
 
@@ -19,6 +20,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/mountains', mountainRoutes); // <-- TAMBAHAN BARU
 app.use('/api/trails', trailRoutes);       // <-- TAMBAHAN BARU
+app.use('/api/weather', weatherRoutes);
 
 const server = http.createServer(app);
 

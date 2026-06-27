@@ -3,18 +3,21 @@ import pandas as pd
 import firebase_admin
 from firebase_admin import credentials, firestore
 import datetime
+import os
 
 # ==========================================
 # 1. INISIALISASI FIREBASE
 # ==========================================
-# Membaca token rahasia yang akan disuntikkan oleh GitHub Actions
-cred = credentials.Certificate("firebase-service-account.json")
+# Cek apakah jalan di lokal atau di GitHub Actions
+cred_path = "config/firebase-service-account.json"
+if not os.path.exists(cred_path):
+    # Kalau di root directory (misal saat cron github jalan)
+    cred_path = "firebase-service-account.json" 
+
+cred = credentials.Certificate(cred_path)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# ==========================================
-# 2. MASTER DATA 3 GUNUNG & KOORDINAT JALUR
-# ==========================================
 master_gunung = [
     {
         "id_doc": "slamet", 
@@ -45,49 +48,50 @@ master_gunung = [
     }
 ]
 
-# ==========================================
-# 3. FUNGSI ANALISIS SISTEM PAKAR (BIG DATA)
-# ==========================================
 def jalankan_sistem_pakar(gunung):
-    print(f"\n🔍 Menganalisis {gunung['nama']}...")
+    print(f"\n🔍 Menganalisis & Menyimpan Data {gunung['nama']}...")
     
     jalur_terbaik = None
     skor_tertinggi = -9999
     alasan_terbaik = ""
 
-    # Looping setiap jalur di gunung tersebut
     for jalur in gunung['jalur']:
-        # Menarik data cuaca 14 Hari kebelakang dari Open-Meteo
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={jalur['lat']}&longitude={jalur['lon']}&past_days=14&daily=precipitation_sum,wind_speed_10m_max&timezone=Asia%2FJakarta"
+        # Tarik data suhu dan angin 14 hari ke belakang
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={jalur['lat']}&longitude={jalur['lon']}&past_days=14&forecast_days=1&daily=precipitation_sum,wind_speed_10m_max,temperature_2m_max&timezone=Asia%2FJakarta"
         
         try:
             response = requests.get(url).json()
-            
-            # --- INTEGRASI KODE PANDAS (DARI UTS BIG DATA) ---
-            # Memasukkan data JSON Harian ke dalam DataFrame Pandas
             df = pd.DataFrame(response['daily'])
             
-            # Mencari total curah hujan dan maksimal angin selama 14 hari
+            # --- SIMPAN HISTORI 7 HARI KE FIREBASE ---
+            temp_history = df['temperature_2m_max'].tail(7).tolist()
+            wind_history = df['wind_speed_10m_max'].tail(7).tolist()
+            dates = df['time'].tail(7).tolist()
+
+            db.collection("weather_history").document(jalur['nama']).set({
+                "mountainId": gunung['id_doc'],
+                "trailName": jalur['nama'],
+                "dates": dates,
+                "tempHistory": temp_history,
+                "windHistory": wind_history,
+                "lastUpdated": firestore.SERVER_TIMESTAMP
+            })
+            print(f"   [+] Data Grafik Suhu & Angin '{jalur['nama']}' disimpan ke Firebase!")
+
+            # --- ANALISIS BIG DATA (14 HARI) ---
             total_hujan = df['precipitation_sum'].sum()
             max_angin = df['wind_speed_10m_max'].max()
             
-            # Algoritma Penilaian (Semakin kecil hujan & angin, skor semakin tinggi)
             skor_keamanan = 100 - (total_hujan * 0.5) - (max_angin * 1.2)
             
-            print(f"   -> {jalur['nama']}: Hujan {total_hujan:.1f}mm, Angin {max_angin}km/h | Skor Keamanan: {skor_keamanan:.1f}")
-
-            # Seleksi Jalur Pemenang
             if skor_keamanan > skor_tertinggi:
                 skor_tertinggi = skor_keamanan
                 jalur_terbaik = jalur['nama']
-                alasan_terbaik = f"Berdasarkan analisis deret waktu, rute ini memiliki iklim mikro paling stabil. Akumulasi curah hujan hanya {total_hujan:.1f} mm dengan angin maksimal {max_angin} km/h dalam 14 hari terakhir."
+                alasan_terbaik = f"Berdasarkan analisis deret waktu, rute ini memiliki iklim mikro paling stabil. Akumulasi hujan hanya {total_hujan:.1f} mm dengan angin maksimal {max_angin} km/h."
 
         except Exception as e:
-            print(f"   [!] Gagal mengambil data di {jalur['nama']}: {e}")
+            print(f"   [!] Gagal memproses {jalur['nama']}: {e}")
 
-    # ==========================================
-    # 4. SIMPAN HASIL KE DATABASE FIREBASE
-    # ==========================================
     if jalur_terbaik:
         hasil_analisis = {
             "gunungId": gunung['id_doc'],
@@ -98,7 +102,7 @@ def jalankan_sistem_pakar(gunung):
             "terakhirUpdate": firestore.SERVER_TIMESTAMP
         }
         db.collection("rekomendasi_cuaca").document(gunung['id_doc']).set(hasil_analisis)
-        print(f"⭐ PEMENANG {gunung['nama']}: {jalur_terbaik} berhasil disimpan ke Firebase!")
+        print(f"⭐ PEMENANG {gunung['nama']}: {jalur_terbaik} berhasil disimpan!")
 
 if __name__ == "__main__":
     print(f"=== CRON JOB DIMULAI: {datetime.datetime.now()} ===")
