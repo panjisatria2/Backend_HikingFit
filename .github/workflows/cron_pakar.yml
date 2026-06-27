@@ -1,9 +1,31 @@
-# Di bagian bawah file cron_pakar.yml
-      - name: Install Library
-        run: pip install -r scripts/requirements.txt  # <-- Membaca dari folder scripts
+name: Update Cuaca Pakar (Big Data)
 
-      - name: Setup Firebase Secret
-        run: echo "${{ secrets.FIREBASE_JSON }}" > firebase-service-account.json
+on:
+  schedule:
+    # Berjalan otomatis setiap jam 01:00 WIB dan 13:00 WIB (18:00 dan 06:00 UTC)
+    - cron: '0 6,18 * * *'
+  # Mengizinkan tombol jalankan manual di web GitHub
+  workflow_dispatch: 
 
-      - name: Jalankan Script Big Data
-        run: python scripts/update_cuaca_pakar.py     # <-- Mengarahkan ke folder scripts
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Setup Firebase Secret (Brankas Kunci)
+        run: |
+          echo '${{ secrets.FIREBASE_JSON }}' > firebase-service-account.json
+
+      - name: Install Dependencies Library
+        run: |
+          pip install -r scripts/requirements.txt
+
+      - name: Jalankan Script Big Data Python
+        run: python scripts/update_cuaca_pakar.py
