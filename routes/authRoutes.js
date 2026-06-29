@@ -118,29 +118,41 @@ const verifyToken = async (req, res, next) => {
   }
 };
 
-// =========================================================================
-// 3. POST: SIMPAN DATA FISIK / QUESIONER (ONBOARDING)
-// =========================================================================
 router.post('/onboarding', verifyToken, async (req, res) => {
   try {
     const uid = req.user.uid; 
-    const { height, weight, experienceLevel, fitnessGoals, mountainPreference } = req.body;
+    
+    // 1. TANGKAP DATA BARU DARI FLUTTER
+    const { 
+      height, 
+      weight, 
+      age, 
+      gender, 
+      experienceLevel, 
+      runningPace, 
+      exerciseFrequency 
+    } = req.body;
 
+    // 2. KALKULASI BMI
     const heightInMeters = height / 100;
     const bmi = (weight / (heightInMeters * heightInMeters)).toFixed(1);
 
+    // 3. SIMPAN SEMUA DATA KE FIRESTORE (Pastikan angka di-parse)
     await db.collection('profiles').doc(uid).set({
-      height: height,
-      weight: weight,
-      bmi: parseFloat(bmi),
-      experienceLevel: experienceLevel,
-      fitnessGoals: fitnessGoals,
-      mountainPreference: mountainPreference,
+      height: parseInt(height) || 0,
+      weight: parseInt(weight) || 0,
+      age: parseInt(age) || 0,
+      gender: gender || '',
+      bmi: parseFloat(bmi) || 0,
+      experienceLevel: experienceLevel || '',
+      runningPace: runningPace || '',
+      exerciseFrequency: exerciseFrequency || '',
       updatedAt: new Date().toISOString()
     }, { merge: true }); 
 
     res.status(200).json({ success: true, message: 'Profil disimpan!' });
   } catch (error) {
+    console.error("Error Onboarding:", error); // Tambahkan log agar jika error kelihatan di terminal
     res.status(500).json({ success: false, message: error.message });
   }
 });
