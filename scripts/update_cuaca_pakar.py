@@ -38,7 +38,7 @@ master_gunung = [
         "nama": "Gunung Merbabu", 
         "jalur": [
             {"nama": "Selo", "lat": -7.482426, "lon": 110.459101},
-            {"nama": "Suwanting", "lat": -7.474842, "lon": 110.4205397343},
+            {"nama": "Suwanting", "lat": -7.474842, "lon": 110.397343},
             {"nama": "Wekas", "lat": -7.432268, "lon": 110.414263}
         ]
     }
