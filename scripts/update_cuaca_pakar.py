@@ -5,13 +5,9 @@ from firebase_admin import credentials, firestore
 import datetime
 import os
 
-# ==========================================
-# 1. INISIALISASI FIREBASE
-# ==========================================
-# Cek apakah jalan di lokal atau di GitHub Actions
+
 cred_path = "config/firebase-service-account.json"
 if not os.path.exists(cred_path):
-    # Kalau di root directory (misal saat cron github jalan)
     cred_path = "firebase-service-account.json" 
 
 cred = credentials.Certificate(cred_path)
@@ -23,27 +19,27 @@ master_gunung = [
         "id_doc": "slamet", 
         "nama": "Gunung Slamet", 
         "jalur": [
-            {"nama": "Bambangan", "lat": -7.2188, "lon": 109.2550},
-            {"nama": "Dipajaya", "lat": -7.1990, "lon": 109.2601},
-            {"nama": "Guci", "lat": -7.1975, "lon": 109.1664}
+            {"nama": "Bambangan", "lat": -7.22608160009, "lon": 109.2646886},
+            {"nama": "Dipajaya", "lat": -7.22176, "lon": 109.259946},
+            {"nama": "Guci", "lat": -7.19871070034, "lon": 109.1615542}
         ]
     },
     {
         "id_doc": "prau", 
         "nama": "Gunung Prau", 
         "jalur": [
-            {"nama": "Patak Banteng", "lat": -7.2105, "lon": 109.9234},
-            {"nama": "Dieng", "lat": -7.2023, "lon": 109.9078},
-            {"nama": "Wates", "lat": -7.1852, "lon": 109.9451}
+            {"nama": "Patak Banteng", "lat": -7.211819, "lon": 109.925842},
+            {"nama": "Candi Dwarawati", "lat": -7.195501, "lon": 109.912552},
+            {"nama": "Kalilembu", "lat": -7.205342, "lon": 109.918956}
         ]
     },
     {
         "id_doc": "merbabu", 
         "nama": "Gunung Merbabu", 
         "jalur": [
-            {"nama": "Selo", "lat": -7.4812, "lon": 110.4501},
-            {"nama": "Suwanting", "lat": -7.4650, "lon": 110.4205},
-            {"nama": "Wekas", "lat": -7.4121, "lon": 110.4287}
+            {"nama": "Selo", "lat": -7.482426, "lon": 110.459101},
+            {"nama": "Suwanting", "lat": -7.474842, "lon": 110.4205397343},
+            {"nama": "Wekas", "lat": -7.432268, "lon": 110.414263}
         ]
     }
 ]
@@ -63,7 +59,6 @@ def jalankan_sistem_pakar(gunung):
             response = requests.get(url).json()
             df = pd.DataFrame(response['daily'])
             
-            # --- SIMPAN HISTORI 7 HARI KE FIREBASE ---
             temp_history = df['temperature_2m_max'].tail(7).tolist()
             wind_history = df['wind_speed_10m_max'].tail(7).tolist()
             dates = df['time'].tail(7).tolist()
@@ -78,7 +73,6 @@ def jalankan_sistem_pakar(gunung):
             })
             print(f"   [+] Data Grafik Suhu & Angin '{jalur['nama']}' disimpan ke Firebase!")
 
-            # --- ANALISIS BIG DATA (14 HARI) ---
             total_hujan = df['precipitation_sum'].sum()
             max_angin = df['wind_speed_10m_max'].max()
             
