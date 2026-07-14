@@ -2,8 +2,8 @@ import express from 'express';
 import http from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import swaggerUi from 'swagger-ui-express'; // <-- TAMBAHAN BARU: Import Swagger UI
-import YAML from 'yamljs';                 // <-- TAMBAHAN BARU: Import Yaml parser
+import swaggerUi from 'swagger-ui-express';
+import { swaggerDocument } from './swagger.js'; // <-- Import dari file JS baru
 
 // Import semua routes
 import authRoutes from './routes/authRoutes.js';
@@ -22,10 +22,14 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // ==========================================
 // SETUP SWAGGER API DOCUMENTATION
 // ==========================================
-// Baca file yaml (Pastikan file openapi.yaml ada di folder yang sama dengan server.js)
-const swaggerDocument = YAML.load('./openapi.yaml'); 
-// Daftarkan endpoint untuk UI dokumentasinya
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));    
+// Gunakan CSS dari CDN Cloudflare untuk mencegah isu static file di Vercel
+const CSS_URL = "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.30.0/swagger-ui.min.css";
+
+app.use(
+  '/api-docs', 
+  swaggerUi.serve, 
+  swaggerUi.setup(swaggerDocument, { customCssUrl: CSS_URL }) // <-- Inject CSS
+); 
 
 // Daftarkan semua endpoint
 app.use('/api/auth', authRoutes);
@@ -38,10 +42,7 @@ const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`🚀 Server mantap running di port ${PORT}`);
-  console.log(`📄 Dokumentasi API tersedia di http://localhost:${PORT}/api-docs`); // <-- TAMBAHAN LOG
+  console.log(`📄 Dokumentasi API tersedia di http://localhost:${PORT}/api-docs`);
 });
 
-// ==========================================
-// BARIS WAJIB UNTUK DEPLOY DI VERCEL
-// ==========================================
 export default app;
