@@ -2,8 +2,7 @@ import express from 'express';
 import http from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import swaggerUi from 'swagger-ui-express';
-import { swaggerDocument } from './swagger.js'; //[cite: 2]
+import { swaggerDocument } from './swagger.js'; // Tetap import file JS yang berisi skema API Anda
 
 // Import semua routes
 import authRoutes from './routes/authRoutes.js';
@@ -13,31 +12,49 @@ import weatherRoutes from './routes/weatherRoutes.js';
 
 dotenv.config();
 
-const app = express(); //[cite: 2]
+const app = express();
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // ==========================================
-// SETUP SWAGGER API DOCUMENTATION
+// SETUP SWAGGER API DOCUMENTATION (VERCEL PROOF)
 // ==========================================
-// Gunakan CDN Cloudflare untuk CSS dan JS agar Vercel tidak kebingungan mencari static files
-const CSS_URL = "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.30.0/swagger-ui.min.css"; //[cite: 2]
-
-const swaggerOptions = {
-  customCssUrl: CSS_URL,
-  customJs: [
-    "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.30.0/swagger-ui-bundle.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.30.0/swagger-ui-standalone-preset.min.js",
-  ],
-};
-
-// Terapkan options yang berisi CDN JS dan CSS ke dalam setup
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, swaggerOptions)); //[cite: 2]
+// Bypass middleware dan kirim HTML murni ke browser
+app.get('/api-docs', (req, res) => {
+  const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>HikingFit API Docs</title>
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css" />
+      <style>
+        body { margin: 0; background: #fafafa; }
+      </style>
+    </head>
+    <body>
+      <div id="swagger-ui"></div>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.min.js"></script>
+      <script>
+        window.onload = () => {
+          window.ui = SwaggerUIBundle({
+            spec: ${JSON.stringify(swaggerDocument)},
+            dom_id: '#swagger-ui',
+            deepLinking: true,
+          });
+        };
+      </script>
+    </body>
+    </html>
+  `;
+  res.send(html);
+});
 
 // Daftarkan semua endpoint
-app.use('/api/auth', authRoutes); //[cite: 2]
+app.use('/api/auth', authRoutes);
 app.use('/api/mountains', mountainRoutes); 
 app.use('/api/trails', trailRoutes);       
 app.use('/api/weather', weatherRoutes);
@@ -50,4 +67,4 @@ server.listen(PORT, () => {
   console.log(`📄 Dokumentasi API tersedia di http://localhost:${PORT}/api-docs`);
 });
 
-export default app; 
+export default app;
